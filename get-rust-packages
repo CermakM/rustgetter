@@ -41,7 +41,7 @@ build_dict = dict((key.split('_')[0], True) for key in os.listdir(SRPM_DIR))
 for build in build_list:
     # Skip already processed builds
     if build in build_dict:
-        print("->Build number {} has already been handled".format(build), file=sys.stderr)
+        print("->Build number {} has already been downloaded".format(build), file=sys.stderr)
         continue
     new_response = http.request('GET', BUILD_URL + build)
     # Try to get url and src rpm
@@ -63,4 +63,6 @@ for dirpath, _, fnames in os.walk(SRPM_DIR):
     for fname in fnames:
         fname_base = re.match("[0-9]+_(.*).src.rpm$", fname).group(1)
         os.system("mkdir -p {0} && cd {0}; rpm2cpio {1}{2} | cpio -idmv".format(fname_base, dirpath, fname))
-        os.system("cd {} && tar xzf {}".format(fname_base, glob(os.path.abspath(fname_base) + "/*.crate")[0]))
+        crate = glob(os.path.abspath(fname_base) + "/*.crate")
+        if len(crate):
+            os.system("cd {} && tar xzf {}".format(fname_base, crate[0]))
