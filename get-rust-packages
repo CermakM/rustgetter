@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+
+# Find and Download rust packages from selected website
+
+# Imports
+import os
+import re
+import urllib3
+from bs4 import BeautifulSoup
+from glob import glob
+
+# Constant urls ( may be replaced by user input, but not necessary now )
+URL = "https://copr.fedorainfracloud.org/coprs/g/rust/playground/builds/"
+BUILD_URL = "https://copr.fedorainfracloud.org/coprs/g/rust/playground/build/"
+
+# Disable certificate warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+http = urllib3.PoolManager()
+response = http.request('GET', URL)
+
+soup = BeautifulSoup(response.data, 'html.parser')
+
+# Get list of build numbers
+# TODO: Select only succeeded builds?
+tag_list = soup.find_all('a', string=re.compile("[0-9]+"))
+build_list = []
+for tag in tag_list:
+    build_list.append(tag.text.strip())
+
+# Create directory for SRPMs in current working directory
+SRPM_DIR = os.getcwd() + "/SRPMS/"
+os.system("mkdir -p {}".format(SRPM_DIR))
+
+# Explore each build separately and download the SRPM for fedora-rawhide
+for build in build_list[:1]:
+    new_response = http.request('GET', BUILD_URL + build)
+    rawhide_url = BeautifulSoup(new_response.data, 'html.parser').find('a', href=re.compile("fedora-rawhide"))['href']
+    # Find the *src.rpm file and download it to the current directory
+    rawhide_response = http.request('GET', rawhide_url)
+    rawhide_src = BeautifulSoup(rawhide_response.data, 'html.parser').find('a', href=re.compile("src.rpm"))['href']
+    # Write SRPM to file
+    with open(SRPM_DIR + rawhide_src, 'wb') as srpm:
+        srpm.write(http.request('GET', rawhide_url + rawhide_src).data)
+
+# Extract each SRPM package into separate directory and get the source
+for dirpath, _, fnames in os.walk(SRPM_DIR):
+    for fname in fnames:
+        fname_base = re.match("(.*).src.rpm$", fname).group(1)
+        os.system("mkdir -p {0} && cd {0}; rpm2cpio {1}{2} | cpio -idmv".format(fname_base, dirpath, fname))
+        os.system("cd {} && tar xzf {}".format(fname_base, glob(os.path.abspath(fname_base) + "/*.crate")[0]))
